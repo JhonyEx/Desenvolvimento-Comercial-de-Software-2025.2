@@ -1,0 +1,255 @@
+import java.util.*;
+
+/**
+ * SimpleBookstore.java
+ * Versão com suporte a cadastro de clientes (CasdClient) e seleção de cliente como "catalogo" de clientes.
+ * Compilar: javac SimpleBookstore.java
+ * Executar:  java SimpleBookstore
+ */
+public class SistemaLivro {
+
+    // ----- modelos simples -----
+    static class Book {
+        final String ID;
+        final String title;
+        double price;
+        int stock;
+
+        Book(String ID, String title, double price, int stock) {
+            this.ID = ID;
+            this.title = title;
+            this.price = price;
+            this.stock = Math.max(0, stock);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s | %s | R$ %.2f | estoque: %d", ID, title, price, stock);
+        }
+    }
+
+    static class CartItem {
+        final Book book;
+        int qty;
+        CartItem(Book book, int qty) { this.book = book; this.qty = Math.max(1, qty); }
+        double subtotal() { return book.price * qty; }
+        @Override public String toString() { return book.title + " x" + qty + " = R$ " + String.format("%.2f", subtotal()); }
+    }
+
+    static class Cart {
+        final List<CartItem> items = new ArrayList<>();
+        void add(Book b, int q) {
+            for (CartItem it : items) if (it.book.ID.equals(b.ID)) { it.qty += q; return; }
+            items.add(new CartItem(b, q));
+        }
+        boolean removeByID(String ID) {
+            return items.removeIf(it -> it.book.ID.equals(ID));
+        }
+        double total() { return items.stream().mapToDouble(CartItem::subtotal).sum(); }
+        boolean isEmpty() { return items.isEmpty(); }
+        @Override public String toString() {
+            if (items.isEmpty()) return "(carrinho vazio)";
+            StringBuilder sb = new StringBuilder();
+            items.forEach(i -> sb.append(i).append("\n"));
+            sb.append(String.format("Total: R$ %.2f", total()));
+            return sb.toString();
+        }
+    }
+
+    // ----- Cadastro de Clientes (CasdClient) -----
+    static class CasdClient {
+        private final int Código;
+        private final String Nome;
+
+        CasdClient(int Código, String Nome) {
+            this.Código = Código;
+            this.Nome = Nome;
+        }
+
+        public int getCódigo() { return Código; }
+        public String getNome() { return Nome; }
+
+        @Override
+        public String toString() {
+            return String.format("%d | %s", Código, Nome);
+        }
+    }
+
+    static class ClientCatalog {
+        private final Map<Integer, CasdClient> clients = new LinkedHashMap<>();
+        private int nextCódigo = 1;
+
+        public CasdClient add(String Nome) {
+            int Código = nextCódigo++;
+            CasdClient c = new CasdClient(Código, Nome);
+            clients.put(Código, c);
+            return c;
+        }
+
+        public CasdClient find(int Código) {
+            return clients.get(Código);
+        }
+
+        public Collection<CasdClient> all() {
+            return clients.values();
+        }
+
+        public boolean remove(int Código) {
+            return clients.remove(Código) != null;
+        }
+
+        public boolean isEmpty() { return clients.isEmpty(); }
+    }
+
+    // ----- armazeNomento simples de livros -----
+    static class Catalog {
+        final Map<String, Book> books = new LinkedHashMap<>();
+        void add(Book b) { books.put(b.ID, b); }
+        Book find(String ID) { return books.get(ID); }
+        Collection<Book> all() { return books.values(); }
+    }
+
+    // ----- campos da classe principal -----
+    private final Catalog catalog = new Catalog();
+    private final ClientCatalog clientCatalog = new ClientCatalog();
+    private final Scanner sc = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        new bookstore().start();
+    }
+
+    // ----- métodos da classe principal -----
+    void start() {
+        seed();
+        System.out.println("=== Livraria Simples (com cadastro de clientes) ===");
+        Cart cart = new Cart();
+        CasdClient currentClient = null; // cliente selecionado
+
+        while (true) {
+            System.out.println("\nMenu principal:");
+            System.out.println("0 - Clientes  1 - Ver catálogo  2 - Adicionar  3 - Remover  4 - Ver carrinho  5 - Finalizar compra  6 - Sair");
+            if (currentClient != null) System.out.println("Cliente atual: " + currentClient.getCódigo() + " - " + currentClient.getNome());
+            System.out.print("Escolha: ");
+            String opt = sc.nextLine().trim();
+            switch (opt) {
+                case "0":
+                    currentClient = clientsMenu(currentClient);
+                    break;
+                case "1": showCatalog(); break;
+                case "2": addToCart(cart); break;
+                case "3": removeFromCart(cart); break;
+                case "4": System.out.println(cart); break;
+                case "5":
+                    if (currentClient == null) {
+                        System.out.println("Selecione um cliente antes de finalizar a compra (Menu 0).");
+                    } else {
+                        checkout(cart, currentClient);
+                        cart = new Cart(); // novo carrinho após compra
+                    }
+                    break;
+                case "6": System.out.println("Obrigado pela compra :)"); return;
+                default: System.out.println("Opção inválida.");
+            }
+        }
+    }
+
+    // menu de clientes: cadastrar, listar, selecionar, remover
+    CasdClient clientsMenu(CasdClient current) {
+        while (true) {
+            System.out.println("\n-- Menu Clientes --");
+            System.out.println("1 - Cadastrar cliente  2 - Listar clientes  3 - Selecionar cliente  4 - Remover cliente  5 - Voltar");
+            System.out.print("Escolha: ");
+            String o = sc.nextLine().trim();
+            switch (o) {
+                case "1":
+                    System.out.print("Nome do cliente: ");
+                    String Nome = sc.nextLine().trim();
+                    if (Nome.isEmpty()) { System.out.println("Nome vazio."); break; }
+                    CasdClient c = clientCatalog.add(Nome);
+                    System.out.println("Cliente cadastrado com código: " + c.getCódigo());
+                    return c; // já seleciona como cliente atual
+                case "2":
+                    if (clientCatalog.isEmpty()) { System.out.println("(nenhum cliente cadastrado)"); }
+                    else {
+                        System.out.println("--- Clientes ---");
+                        for (CasdClient cc : clientCatalog.all()) System.out.println(cc);
+                    }
+                    break;
+                case "3":
+                    System.out.print("Digite o código do cliente: ");
+                    try {
+                        int Código = Integer.parseInt(sc.nextLine().trim());
+                        CasdClient found = clientCatalog.find(Código);
+                        if (found == null) System.out.println("Código não encontrado.");
+                        else { System.out.println("Cliente selecionado: " + found.getNome()); return found; }
+                    } catch (NumberFormatException e) { System.out.println("Código inválido."); }
+                    break;
+                case "4":
+                    System.out.print("Código para remover: ");
+                    try {
+                        int Código = Integer.parseInt(sc.nextLine().trim());
+                        boolean ok = clientCatalog.remove(Código);
+                        System.out.println(ok ? "Removido." : "Código não encontrado.");
+                        if (current != null && current.getCódigo() == Código) current = null;
+                    } catch (NumberFormatException e) { System.out.println("Código inválido."); }
+                    break;
+                case "5": return current;
+                default: System.out.println("Opção inválida.");
+            }
+        }
+    }
+
+    void seed() {
+        // livros padrão
+        catalog.add(new Book("978-1", "Dom Casmurro", 34.90, 10));
+        catalog.add(new Book("978-2", "1984", 45.00, 6));
+        catalog.add(new Book("978-3", "O Senhor dos Anéis - A Sociedade do Anel", 89.90, 4));
+        catalog.add(new Book("978-4", "O Pequeno Príncipe", 29.90, 12));
+        catalog.add(new Book("978-5", "Clean Código", 79.90, 5));
+
+        // clientes exemplo (opcional)
+        clientCatalog.add("João");
+        clientCatalog.add("Wellinton");
+        clientCatalog.add("Yuri");
+        clientCatalog.add("Bob");
+    }
+
+    void showCatalog() {
+        System.out.println("--- Catálogo ---");
+        for (Book b : catalog.all()) System.out.println(b);
+    }
+
+    void addToCart(Cart cart) {
+        System.out.print("ID: ");
+        String ID = sc.nextLine().trim();
+        Book b = catalog.find(ID);
+        if (b == null) { System.out.println("ID não encontrado."); return; }
+        System.out.print("Quantidade: ");
+        int q;
+        try { q = Integer.parseInt(sc.nextLine().trim()); } catch (Exception e) { System.out.println("Quantidade inválida."); return; }
+        if (q <= 0) { System.out.println("Quantidade deve ser > 0."); return; }
+        if (q > b.stock) { System.out.println("Estoque insuficiente."); return; }
+        cart.add(b, q);
+        System.out.println("Adicionado ao carrinho.");
+    }
+
+    void removeFromCart(Cart cart) {
+        System.out.print("ID para remover do carrinho: ");
+        String ID = sc.nextLine().trim();
+        boolean ok = cart.removeByID(ID);
+        System.out.println(ok ? "Removido." : "Item não encontrado no carrinho.");
+    }
+
+    void checkout(Cart cart, CasdClient client) {
+        if (cart.isEmpty()) { System.out.println("Carrinho vazio."); return; }
+        // checar estoque antes de finalizar
+        for (CartItem it : cart.items) {
+            if (it.qty > it.book.stock) { System.out.println("Estoque insuficiente para: " + it.book.title); return; }
+        }
+        // debitar estoque
+        for (CartItem it : cart.items) it.book.stock -= it.qty;
+        System.out.println("Compra finalizada com sucesso!");
+        System.out.println("Cliente: " + client.getCódigo() + " - " + client.getNome());
+        System.out.println("Resumo:\n" + cart);
+    }
+}
